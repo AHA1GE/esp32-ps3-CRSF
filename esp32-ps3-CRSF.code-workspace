@@ -1,0 +1,21 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"*.page-template": "vue",
+			"*.layout-template": "vue",
+			"*.vue": "vue",
+			"xlocale": "cpp",
+			"xstring": "cpp",
+			"xutility": "cpp",
+			"string": "cpp",
+			"sstream": "cpp",
+			"ostream": "cpp",
+			"cstdint": "cpp"
+		}
+	}
+}
