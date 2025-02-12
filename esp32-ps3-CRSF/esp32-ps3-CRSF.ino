@@ -7,21 +7,19 @@
 
 #include <Ps3Controller.h>
 
-byte channelAmount = 8;
-
 // default channel order is  AETR
-#define TAER
+// #define TAER
 
 #define RADIO_ADDRESS 0xEA
-#define ADDR_MODULE 0xEE //  Crossfire transmitter
+#define ADDR_MODULE 0xEE  //  Crossfire transmitter
 #define TYPE_CHANNELS 0x16
 
 // internal crsf variables
 #define CRSF_CHANNEL_MIN 172
 #define CRSF_CHANNEL_MID 991
 #define CRSF_CHANNEL_MAX 1811
-#define CRSF_TIME_NEEDED_PER_FRAME_US 1100 // 700 ms + 400 ms for potential ad-hoc request
-#define CRSF_TIME_BETWEEN_FRAMES_US 4000   // 4 ms 250Hz
+#define CRSF_TIME_NEEDED_PER_FRAME_US 1100  // 700 ms + 400 ms for potential ad-hoc request
+#define CRSF_TIME_BETWEEN_FRAMES_US 4000    // 4 ms 250Hz
 #define CRSF_PAYLOAD_OFFSET offsetof(crsfFrameDef_t, type)
 #define CRSF_MAX_CHANNEL 16
 #define CRSF_FRAME_SIZE_MAX 64
@@ -31,19 +29,19 @@ byte channelAmount = 8;
 #define CRSF_PAYLOAD_SIZE_MAX 60
 #define CRSF_PACKET_LENGTH 22
 #define CRSF_PACKET_SIZE 26
-#define CRSF_FRAME_LENGTH 24; // length of type + payload + crc
+#define CRSF_FRAME_LENGTH 24;  // length of type + payload + crc
 
 #define RXD2 16
 #define TXD2 17
 
 #define LED_CONNECT_PIN 2
-#define LED_RGB_PIN 48 // WS2812 of ESP32s3 Super-Mini, not used
+#define LED_RGB_PIN 48  // WS2812 of ESP32s3 Super-Mini, not used
 
 uint8_t crsfPacket[CRSF_PACKET_SIZE];
 int rcChannels[CRSF_MAX_CHANNEL];
 uint32_t crsfTime = 0;
 
-int battery = 0; // Ps3 controller battery
+int battery = 0;  // Ps3 controller battery
 
 // global variables for buttons used as self-locking switches
 bool stateButtonCross = false;
@@ -56,388 +54,187 @@ bool stateButtonSelect = false;
 bool stateButtonStart = false;
 
 #ifdef TAER
-enum chan_order
-{
-    THROTTLE,
-    AILERON,
-    ELEVATOR,
-    RUDDER,
-    AUX1, // (CH5)  ARM switch for Expresslrs
-    AUX2, // (CH6)  angel / airmode change
-    AUX3, // (CH7)  flip after crash
-    AUX4, // (CH8)
-    AUX5, // (CH9)
-    AUX6, // (CH10)
-    AUX7, // (CH11)
-    AUX8, // (CH12)
-    AUX9, // (CH13)
-    AUX10, // (CH14)
-    AUX11, // (CH15)
-    AUX12, // (CH16)
+enum chan_order {
+  THROTTLE,
+  AILERON,
+  ELEVATOR,
+  RUDDER,
+  AUX1,   // (CH5)  ARM switch for Expresslrs
+  AUX2,   // (CH6)  angel / airmode change
+  AUX3,   // (CH7)  flip after crash
+  AUX4,   // (CH8)
+  AUX5,   // (CH9)
+  AUX6,   // (CH10)
+  AUX7,   // (CH11)
+  AUX8,   // (CH12)
+  AUX9,   // (CH13)
+  AUX10,  // (CH14)
+  AUX11,  // (CH15)
+  AUX12,  // (CH16)
 };
 #else
-enum chan_order
-{
-    AILERON,
-    ELEVATOR,
-    THROTTLE,
-    RUDDER,
-    AUX1, // (CH5)  ARM switch for Expresslrs
-    AUX2, // (CH6)  angel / airmode change
-    AUX3, // (CH7)  flip after crash
-    AUX4, // (CH8)
-    AUX5, // (CH9)
-    AUX6, // (CH10)
-    AUX7, // (CH11)
-    AUX8, // (CH12)
+enum chan_order {
+  AILERON,
+  ELEVATOR,
+  THROTTLE,
+  RUDDER,
+  AUX1,  // (CH5)  ARM switch for Expresslrs
+  AUX2,  // (CH6)  angel / airmode change
+  AUX3,  // (CH7)  flip after crash
+  AUX4,  // (CH8)
+  AUX5,  // (CH9)
+  AUX6,  // (CH10)
+  AUX7,  // (CH11)
+  AUX8,  // (CH12)
+  AUX9,   // (CH13)
+  AUX10,  // (CH14)
+  AUX11,  // (CH15)
+  AUX12,  // (CH16)
 };
 #endif
 
-void notify()
-{
-    //--- Digital cross/square/triangle/circle button events ---
-    if (Ps3.event.button_down.cross)
-        Serial2.println("Started pressing the cross button");
-    if (Ps3.event.button_up.cross)
-        Serial2.println("Released the cross button");
-
-    if (Ps3.event.button_down.square)
-        Serial2.println("Started pressing the square button");
-    if (Ps3.event.button_up.square)
-        Serial2.println("Released the square button");
-
-    if (Ps3.event.button_down.triangle)
-        Serial2.println("Started pressing the triangle button");
-    if (Ps3.event.button_up.triangle)
-        Serial2.println("Released the triangle button");
-
-    if (Ps3.event.button_down.circle)
-        Serial2.println("Started pressing the circle button");
-    if (Ps3.event.button_up.circle)
-        Serial2.println("Released the circle button");
-
-    //--------------- Digital D-pad button events --------------
-    if (Ps3.event.button_down.up)
-        Serial2.println("Started pressing the up button");
-    if (Ps3.event.button_up.up)
-        Serial2.println("Released the up button");
-
-    if (Ps3.event.button_down.right)
-        Serial2.println("Started pressing the right button");
-    if (Ps3.event.button_up.right)
-        Serial2.println("Released the right button");
-
-    if (Ps3.event.button_down.down)
-        Serial2.println("Started pressing the down button");
-    if (Ps3.event.button_up.down)
-        Serial2.println("Released the down button");
-
-    if (Ps3.event.button_down.left)
-        Serial2.println("Started pressing the left button");
-    if (Ps3.event.button_up.left)
-        Serial2.println("Released the left button");
-
-    //------------- Digital shoulder button events -------------
-    if (Ps3.event.button_down.l1)
-        Serial2.println("Started pressing the left shoulder button");
-    if (Ps3.event.button_up.l1)
-        Serial2.println("Released the left shoulder button");
-
-    if (Ps3.event.button_down.r1)
-        Serial2.println("Started pressing the right shoulder button");
-    if (Ps3.event.button_up.r1)
-        Serial2.println("Released the right shoulder button");
-
-    //-------------- Digital trigger button events -------------
-    if (Ps3.event.button_down.l2)
-        Serial2.println("Started pressing the left trigger button");
-    if (Ps3.event.button_up.l2)
-        Serial2.println("Released the left trigger button");
-
-    if (Ps3.event.button_down.r2)
-        Serial2.println("Started pressing the right trigger button");
-    if (Ps3.event.button_up.r2)
-        Serial2.println("Released the right trigger button");
-
-    //--------------- Digital stick button events --------------
-    if (Ps3.event.button_down.l3)
-        Serial2.println("Started pressing the left stick button");
-    if (Ps3.event.button_up.l3)
-        Serial2.println("Released the left stick button");
-
-    if (Ps3.event.button_down.r3)
-        Serial2.println("Started pressing the right stick button");
-    if (Ps3.event.button_up.r3)
-        Serial2.println("Released the right stick button");
-
-    //---------- Digital select/start/ps button events ---------
-    if (Ps3.event.button_down.select)
-        Serial2.println("Started pressing the select button");
-    if (Ps3.event.button_up.select)
-        Serial2.println("Released the select button");
-
-    if (Ps3.event.button_down.start)
-        Serial2.println("Started pressing the start button");
-    if (Ps3.event.button_up.start)
-        Serial2.println("Released the start button");
-
-    if (Ps3.event.button_down.ps)
-        Serial2.println("Started pressing the Playstation button");
-    if (Ps3.event.button_up.ps)
-        Serial2.println("Released the Playstation button");
-
-    //---------------- Analog stick value events ---------------
-    if (abs(Ps3.event.analog_changed.stick.lx) + abs(Ps3.event.analog_changed.stick.ly) > 2)
-    {
-        Serial2.print("Moved the left stick:");
-        Serial2.print(" x=");
-        Serial2.print(Ps3.data.analog.stick.lx, DEC);
-        Serial2.print(" y=");
-        Serial2.print(Ps3.data.analog.stick.ly, DEC);
-        Serial2.println();
-    }
-
-    if (abs(Ps3.event.analog_changed.stick.rx) + abs(Ps3.event.analog_changed.stick.ry) > 2)
-    {
-        Serial2.print("Moved the right stick:");
-        Serial2.print(" x=");
-        Serial2.print(Ps3.data.analog.stick.rx, DEC);
-        Serial2.print(" y=");
-        Serial2.print(Ps3.data.analog.stick.ry, DEC);
-        Serial2.println();
-    }
-
-    //--------------- Analog D-pad button events ----------------
-    if (abs(Ps3.event.analog_changed.button.up))
-    {
-        Serial2.print("Pressing the up button: ");
-        Serial2.println(Ps3.data.analog.button.up, DEC);
-    }
-
-    if (abs(Ps3.event.analog_changed.button.right))
-    {
-        Serial2.print("Pressing the right button: ");
-        Serial2.println(Ps3.data.analog.button.right, DEC);
-    }
-
-    if (abs(Ps3.event.analog_changed.button.down))
-    {
-        Serial2.print("Pressing the down button: ");
-        Serial2.println(Ps3.data.analog.button.down, DEC);
-    }
-
-    if (abs(Ps3.event.analog_changed.button.left))
-    {
-        Serial2.print("Pressing the left button: ");
-        Serial2.println(Ps3.data.analog.button.left, DEC);
-    }
-
-    //---------- Analog shoulder/trigger button events ----------
-    if (abs(Ps3.event.analog_changed.button.l1))
-    {
-        Serial2.print("Pressing the left shoulder button: ");
-        Serial2.println(Ps3.data.analog.button.l1, DEC);
-    }
-
-    if (abs(Ps3.event.analog_changed.button.r1))
-    {
-        Serial2.print("Pressing the right shoulder button: ");
-        Serial2.println(Ps3.data.analog.button.r1, DEC);
-    }
-
-    if (abs(Ps3.event.analog_changed.button.l2))
-    {
-        Serial2.print("Pressing the left trigger button: ");
-        Serial2.println(Ps3.data.analog.button.l2, DEC);
-    }
-
-    if (abs(Ps3.event.analog_changed.button.r2))
-    {
-        Serial2.print("Pressing the right trigger button: ");
-        Serial2.println(Ps3.data.analog.button.r2, DEC);
-    }
-
-    //---- Analog cross/square/triangle/circle button events ----
-    if (abs(Ps3.event.analog_changed.button.triangle))
-    {
-        Serial2.print("Pressing the triangle button: ");
-        Serial2.println(Ps3.data.analog.button.triangle, DEC);
-    }
-
-    if (abs(Ps3.event.analog_changed.button.circle))
-    {
-        Serial2.print("Pressing the circle button: ");
-        Serial2.println(Ps3.data.analog.button.circle, DEC);
-    }
-
-    if (abs(Ps3.event.analog_changed.button.cross))
-    {
-        Serial2.print("Pressing the cross button: ");
-        Serial2.println(Ps3.data.analog.button.cross, DEC);
-    }
-
-    if (abs(Ps3.event.analog_changed.button.square))
-    {
-        Serial2.print("Pressing the square button: ");
-        Serial2.println(Ps3.data.analog.button.square, DEC);
-    }
-
-    //---------------------- Battery events ---------------------
-    if (battery != Ps3.data.status.battery)
-    {
-        battery = Ps3.data.status.battery;
-        Serial2.print("The controller battery is ");
-        if (battery == ps3_status_battery_charging)
-            Serial2.println("charging");
-        else if (battery == ps3_status_battery_full)
-            Serial2.println("FULL");
-        else if (battery == ps3_status_battery_high)
-            Serial2.println("HIGH");
-        else if (battery == ps3_status_battery_low)
-            Serial2.println("LOW");
-        else if (battery == ps3_status_battery_dying)
-            Serial2.println("DYING");
-        else if (battery == ps3_status_battery_shutdown)
-            Serial2.println("SHUTDOWN");
-        else
-            Serial2.println("UNDEFINED");
-    }
-}
-void onConnect()
-{
-    Serial2.println("Connected.");
-    // Board LED on D2
-    pinMode(LED_CONNECT_PIN, OUTPUT);
-    digitalWrite(LED_CONNECT_PIN, HIGH);
-}
-void onDisconnect()
-{
-    Serial2.println("Disconnected.");
-    // Board LED on D2
-    pinMode(LED_CONNECT_PIN, OUTPUT);
-    digitalWrite(LED_CONNECT_PIN, LOW);
-}
-
-void setup()
-{
-    for (uint8_t i = 0; i < CRSF_MAX_CHANNEL; i++)
-    {
-        rcChannels[i] = CRSF_CHANNEL_MID;
-    }
-    rcChannels[THROTTLE] = CRSF_CHANNEL_MIN; // Throttle
-
-    delay(1000);
-    Serial.begin(SERIAL_BAUDRATE);
-    Serial2.begin(9600, SERIAL_8N1, RXD2, TXD2);
-
-    Ps3.begin("20:00:00:00:23:44");
-    // Ps3.attach(notify); // Uncomment to enable Ps3 controller events
-    Ps3.attachOnConnect(onConnect);
-    Ps3.attachOnDisconnect(onDisconnect);
-}
-
-void loop()
-{
-    // Self-locking switches state update
-    if (Ps3.data.button.cross)
-        stateButtonCross = !stateButtonCross;
-    if (Ps3.data.button.circle)
-        stateButtonCircle = !stateButtonCircle;
-    if (Ps3.data.button.square)
-        stateButtonSquare = !stateButtonSquare;
-    if (Ps3.data.button.triangle)
-        stateButtonTriangle = !stateButtonTriangle;
-    if (Ps3.data.button.l1)
-        stateTriggerL1 = !stateTriggerL1;
-    if (Ps3.data.button.r1)
-        stateTriggerR1 = !stateTriggerR1;
-    if (Ps3.data.button.select)
-        stateButtonSelect = !stateButtonSelect;
-    if (Ps3.data.button.start)
-        stateButtonStart = !stateButtonStart;
-
-    uint32_t currentMicros = micros();
-
-    if (Ps3.isConnected())
-    {
-        rcChannels[THROTTLE] = map(Ps3.data.analog.stick.ly, 0, 255, CRSF_CHANNEL_MIN, CRSF_CHANNEL_MAX);
-        rcChannels[AILERON] = map(Ps3.data.analog.stick.lx, 0, 255, CRSF_CHANNEL_MIN, CRSF_CHANNEL_MAX);
-        rcChannels[ELEVATOR] = map(Ps3.data.analog.stick.ry, 0, 255, CRSF_CHANNEL_MIN, CRSF_CHANNEL_MAX);
-        rcChannels[RUDDER] = map(Ps3.data.analog.stick.rx, 0, 255, CRSF_CHANNEL_MIN, CRSF_CHANNEL_MAX);
-        rcChannels[AUX1] = stateTriggerL1 ? CRSF_CHANNEL_MAX : CRSF_CHANNEL_MIN;
-        rcChannels[AUX2] = stateTriggerR1 ? CRSF_CHANNEL_MAX : CRSF_CHANNEL_MIN;
-        rcChannels[AUX3] = stateButtonSelect ? CRSF_CHANNEL_MAX : CRSF_CHANNEL_MIN;
-        rcChannels[AUX4] = stateButtonStart ? CRSF_CHANNEL_MAX : CRSF_CHANNEL_MIN;
-        rcChannels[AUX5] = Ps3.data.button.cross ? CRSF_CHANNEL_MAX : CRSF_CHANNEL_MIN;
-        rcChannels[AUX6] = Ps3.data.button.circle ? CRSF_CHANNEL_MAX : CRSF_CHANNEL_MIN;
-        rcChannels[AUX7] = Ps3.data.button.square ? CRSF_CHANNEL_MAX : CRSF_CHANNEL_MIN;
-        rcChannels[AUX8] = Ps3.data.button.triangle ? CRSF_CHANNEL_MAX : CRSF_CHANNEL_MIN;
-        rcChannels[AUX9] = stateButtonCross ? CRSF_CHANNEL_MAX : CRSF_CHANNEL_MIN;
-        rcChannels[AUX10] = stateButtonCircle ? CRSF_CHANNEL_MAX : CRSF_CHANNEL_MIN;
-        rcChannels[AUX11] = stateButtonSquare ? CRSF_CHANNEL_MAX : CRSF_CHANNEL_MIN;
-        rcChannels[AUX12] = stateButtonTriangle ? CRSF_CHANNEL_MAX : CRSF_CHANNEL_MIN;
-    }
+void notify() {
+  //---------------------- Battery events ---------------------
+  if (battery != Ps3.data.status.battery) {
+    battery = Ps3.data.status.battery;
+    Serial2.print("The controller battery is ");
+    if (battery == ps3_status_battery_charging)
+      Serial2.println("charging");
+    else if (battery == ps3_status_battery_full)
+      Serial2.println("FULL");
+    else if (battery == ps3_status_battery_high)
+      Serial2.println("HIGH");
+    else if (battery == ps3_status_battery_low)
+      Serial2.println("LOW");
+    else if (battery == ps3_status_battery_dying)
+      Serial2.println("DYING");
+    else if (battery == ps3_status_battery_shutdown)
+      Serial2.println("SHUTDOWN");
     else
-    {
-        // set fail safe value
-        rcChannels[THROTTLE] = CRSF_CHANNEL_MIN; //
-        rcChannels[AILERON] = CRSF_CHANNEL_MID;  //
-        rcChannels[ELEVATOR] = CRSF_CHANNEL_MID; //
-        rcChannels[RUDDER] = CRSF_CHANNEL_MID;   //
-        rcChannels[AUX1] = CRSF_CHANNEL_MIN;     // ARM Low
-    }
+      Serial2.println("UNDEFINED");
+  }
+}
+void onConnect() {
+  Serial2.println("Connected.");
+  digitalWrite(LED_CONNECT_PIN, HIGH);
+}
+void onDisconnect() {
+  Serial2.println("Disconnected.");
+  digitalWrite(LED_CONNECT_PIN, LOW);
+}
 
-    if (currentMicros > crsfTime)
-    {
-        crsfPreparePacket(crsfPacket, rcChannels);
-        Serial.write(crsfPacket, CRSF_PACKET_SIZE);
-        crsfTime = currentMicros + CRSF_TIME_BETWEEN_FRAMES_US;
-    }
+void setup() {
+  Serial.begin(SERIAL_BAUDRATE);
+  pinMode(LED_CONNECT_PIN, OUTPUT);
+  Ps3.begin("20:00:00:00:23:44");
+  Ps3.attach(notify); 
+  Ps3.attachOnConnect(onConnect);
+  Ps3.attachOnDisconnect(onDisconnect);
+
+  for (uint8_t i = 0; i < CRSF_MAX_CHANNEL; i++) {
+    rcChannels[i] = CRSF_CHANNEL_MID;
+  }
+  rcChannels[THROTTLE] = CRSF_CHANNEL_MIN;  // Throttle
+  
+  delay(1000);
+  Serial2.begin(9600, SERIAL_8N1, RXD2, TXD2);
+}
+
+void loop() {
+  // Self-locking switches state update
+  if (Ps3.data.button.cross)
+    stateButtonCross = !stateButtonCross;
+  if (Ps3.data.button.circle)
+    stateButtonCircle = !stateButtonCircle;
+  if (Ps3.data.button.square)
+    stateButtonSquare = !stateButtonSquare;
+  if (Ps3.data.button.triangle)
+    stateButtonTriangle = !stateButtonTriangle;
+  if (Ps3.data.button.l1)
+    stateTriggerL1 = !stateTriggerL1;
+  if (Ps3.data.button.r1)
+    stateTriggerR1 = !stateTriggerR1;
+  if (Ps3.data.button.select)
+    stateButtonSelect = !stateButtonSelect;
+  if (Ps3.data.button.start)
+    stateButtonStart = !stateButtonStart;
+
+  uint32_t currentMicros = micros();
+
+  if (Ps3.isConnected()) {
+    rcChannels[THROTTLE] = map(Ps3.data.analog.stick.ly, 0, 255, CRSF_CHANNEL_MIN, CRSF_CHANNEL_MAX);
+    rcChannels[AILERON] = map(Ps3.data.analog.stick.lx, 0, 255, CRSF_CHANNEL_MIN, CRSF_CHANNEL_MAX);
+    rcChannels[ELEVATOR] = map(Ps3.data.analog.stick.ry, 0, 255, CRSF_CHANNEL_MIN, CRSF_CHANNEL_MAX);
+    rcChannels[RUDDER] = map(Ps3.data.analog.stick.rx, 0, 255, CRSF_CHANNEL_MIN, CRSF_CHANNEL_MAX);
+    rcChannels[AUX1] = stateTriggerL1 ? CRSF_CHANNEL_MAX : CRSF_CHANNEL_MIN;
+    rcChannels[AUX2] = stateTriggerR1 ? CRSF_CHANNEL_MAX : CRSF_CHANNEL_MIN;
+    rcChannels[AUX3] = stateButtonSelect ? CRSF_CHANNEL_MAX : CRSF_CHANNEL_MIN;
+    rcChannels[AUX4] = stateButtonStart ? CRSF_CHANNEL_MAX : CRSF_CHANNEL_MIN;
+    rcChannels[AUX5] = Ps3.data.button.cross ? CRSF_CHANNEL_MAX : CRSF_CHANNEL_MIN;
+    rcChannels[AUX6] = Ps3.data.button.circle ? CRSF_CHANNEL_MAX : CRSF_CHANNEL_MIN;
+    rcChannels[AUX7] = Ps3.data.button.square ? CRSF_CHANNEL_MAX : CRSF_CHANNEL_MIN;
+    rcChannels[AUX8] = Ps3.data.button.triangle ? CRSF_CHANNEL_MAX : CRSF_CHANNEL_MIN;
+    rcChannels[AUX9] = stateButtonCross ? CRSF_CHANNEL_MAX : CRSF_CHANNEL_MIN;
+    rcChannels[AUX10] = stateButtonCircle ? CRSF_CHANNEL_MAX : CRSF_CHANNEL_MIN;
+    rcChannels[AUX11] = stateButtonSquare ? CRSF_CHANNEL_MAX : CRSF_CHANNEL_MIN;
+    rcChannels[AUX12] = stateButtonTriangle ? CRSF_CHANNEL_MAX : CRSF_CHANNEL_MIN;
+  } else {
+    digitalWrite(LED_CONNECT_PIN, LOW);
+    // set fail safe value
+    rcChannels[THROTTLE] = CRSF_CHANNEL_MIN;  //
+    rcChannels[AILERON] = CRSF_CHANNEL_MID;   //
+    rcChannels[ELEVATOR] = CRSF_CHANNEL_MID;  //
+    rcChannels[RUDDER] = CRSF_CHANNEL_MID;    //
+    rcChannels[AUX1] = CRSF_CHANNEL_MIN;      // ARM Low
+  }
+
+  if (currentMicros > crsfTime) {
+    crsfPreparePacket(crsfPacket, rcChannels);
+    Serial.write(crsfPacket, CRSF_PACKET_SIZE);
+    crsfTime = currentMicros + CRSF_TIME_BETWEEN_FRAMES_US;
+  }
 }
 
 // crc implementation from CRSF protocol document rev7
 static uint8_t crsf_crc8tab[256] = {
-    0x00, 0xD5, 0x7F, 0xAA, 0xFE, 0x2B, 0x81, 0x54, 0x29, 0xFC, 0x56, 0x83, 0xD7, 0x02, 0xA8, 0x7D,
-    0x52, 0x87, 0x2D, 0xF8, 0xAC, 0x79, 0xD3, 0x06, 0x7B, 0xAE, 0x04, 0xD1, 0x85, 0x50, 0xFA, 0x2F,
-    0xA4, 0x71, 0xDB, 0x0E, 0x5A, 0x8F, 0x25, 0xF0, 0x8D, 0x58, 0xF2, 0x27, 0x73, 0xA6, 0x0C, 0xD9,
-    0xF6, 0x23, 0x89, 0x5C, 0x08, 0xDD, 0x77, 0xA2, 0xDF, 0x0A, 0xA0, 0x75, 0x21, 0xF4, 0x5E, 0x8B,
-    0x9D, 0x48, 0xE2, 0x37, 0x63, 0xB6, 0x1C, 0xC9, 0xB4, 0x61, 0xCB, 0x1E, 0x4A, 0x9F, 0x35, 0xE0,
-    0xCF, 0x1A, 0xB0, 0x65, 0x31, 0xE4, 0x4E, 0x9B, 0xE6, 0x33, 0x99, 0x4C, 0x18, 0xCD, 0x67, 0xB2,
-    0x39, 0xEC, 0x46, 0x93, 0xC7, 0x12, 0xB8, 0x6D, 0x10, 0xC5, 0x6F, 0xBA, 0xEE, 0x3B, 0x91, 0x44,
-    0x6B, 0xBE, 0x14, 0xC1, 0x95, 0x40, 0xEA, 0x3F, 0x42, 0x97, 0x3D, 0xE8, 0xBC, 0x69, 0xC3, 0x16,
-    0xEF, 0x3A, 0x90, 0x45, 0x11, 0xC4, 0x6E, 0xBB, 0xC6, 0x13, 0xB9, 0x6C, 0x38, 0xED, 0x47, 0x92,
-    0xBD, 0x68, 0xC2, 0x17, 0x43, 0x96, 0x3C, 0xE9, 0x94, 0x41, 0xEB, 0x3E, 0x6A, 0xBF, 0x15, 0xC0,
-    0x4B, 0x9E, 0x34, 0xE1, 0xB5, 0x60, 0xCA, 0x1F, 0x62, 0xB7, 0x1D, 0xC8, 0x9C, 0x49, 0xE3, 0x36,
-    0x19, 0xCC, 0x66, 0xB3, 0xE7, 0x32, 0x98, 0x4D, 0x30, 0xE5, 0x4F, 0x9A, 0xCE, 0x1B, 0xB1, 0x64,
-    0x72, 0xA7, 0x0D, 0xD8, 0x8C, 0x59, 0xF3, 0x26, 0x5B, 0x8E, 0x24, 0xF1, 0xA5, 0x70, 0xDA, 0x0F,
-    0x20, 0xF5, 0x5F, 0x8A, 0xDE, 0x0B, 0xA1, 0x74, 0x09, 0xDC, 0x76, 0xA3, 0xF7, 0x22, 0x88, 0x5D,
-    0xD6, 0x03, 0xA9, 0x7C, 0x28, 0xFD, 0x57, 0x82, 0xFF, 0x2A, 0x80, 0x55, 0x01, 0xD4, 0x7E, 0xAB,
-    0x84, 0x51, 0xFB, 0x2E, 0x7A, 0xAF, 0x05, 0xD0, 0xAD, 0x78, 0xD2, 0x07, 0x53, 0x86, 0x2C, 0xF9};
+  0x00, 0xD5, 0x7F, 0xAA, 0xFE, 0x2B, 0x81, 0x54, 0x29, 0xFC, 0x56, 0x83, 0xD7, 0x02, 0xA8, 0x7D,
+  0x52, 0x87, 0x2D, 0xF8, 0xAC, 0x79, 0xD3, 0x06, 0x7B, 0xAE, 0x04, 0xD1, 0x85, 0x50, 0xFA, 0x2F,
+  0xA4, 0x71, 0xDB, 0x0E, 0x5A, 0x8F, 0x25, 0xF0, 0x8D, 0x58, 0xF2, 0x27, 0x73, 0xA6, 0x0C, 0xD9,
+  0xF6, 0x23, 0x89, 0x5C, 0x08, 0xDD, 0x77, 0xA2, 0xDF, 0x0A, 0xA0, 0x75, 0x21, 0xF4, 0x5E, 0x8B,
+  0x9D, 0x48, 0xE2, 0x37, 0x63, 0xB6, 0x1C, 0xC9, 0xB4, 0x61, 0xCB, 0x1E, 0x4A, 0x9F, 0x35, 0xE0,
+  0xCF, 0x1A, 0xB0, 0x65, 0x31, 0xE4, 0x4E, 0x9B, 0xE6, 0x33, 0x99, 0x4C, 0x18, 0xCD, 0x67, 0xB2,
+  0x39, 0xEC, 0x46, 0x93, 0xC7, 0x12, 0xB8, 0x6D, 0x10, 0xC5, 0x6F, 0xBA, 0xEE, 0x3B, 0x91, 0x44,
+  0x6B, 0xBE, 0x14, 0xC1, 0x95, 0x40, 0xEA, 0x3F, 0x42, 0x97, 0x3D, 0xE8, 0xBC, 0x69, 0xC3, 0x16,
+  0xEF, 0x3A, 0x90, 0x45, 0x11, 0xC4, 0x6E, 0xBB, 0xC6, 0x13, 0xB9, 0x6C, 0x38, 0xED, 0x47, 0x92,
+  0xBD, 0x68, 0xC2, 0x17, 0x43, 0x96, 0x3C, 0xE9, 0x94, 0x41, 0xEB, 0x3E, 0x6A, 0xBF, 0x15, 0xC0,
+  0x4B, 0x9E, 0x34, 0xE1, 0xB5, 0x60, 0xCA, 0x1F, 0x62, 0xB7, 0x1D, 0xC8, 0x9C, 0x49, 0xE3, 0x36,
+  0x19, 0xCC, 0x66, 0xB3, 0xE7, 0x32, 0x98, 0x4D, 0x30, 0xE5, 0x4F, 0x9A, 0xCE, 0x1B, 0xB1, 0x64,
+  0x72, 0xA7, 0x0D, 0xD8, 0x8C, 0x59, 0xF3, 0x26, 0x5B, 0x8E, 0x24, 0xF1, 0xA5, 0x70, 0xDA, 0x0F,
+  0x20, 0xF5, 0x5F, 0x8A, 0xDE, 0x0B, 0xA1, 0x74, 0x09, 0xDC, 0x76, 0xA3, 0xF7, 0x22, 0x88, 0x5D,
+  0xD6, 0x03, 0xA9, 0x7C, 0x28, 0xFD, 0x57, 0x82, 0xFF, 0x2A, 0x80, 0x55, 0x01, 0xD4, 0x7E, 0xAB,
+  0x84, 0x51, 0xFB, 0x2E, 0x7A, 0xAF, 0x05, 0xD0, 0xAD, 0x78, 0xD2, 0x07, 0x53, 0x86, 0x2C, 0xF9
+};
 
-uint8_t crsf_crc8(const uint8_t *ptr, uint8_t len)
-{
-    uint8_t crc = 0;
-    for (uint8_t i = 0; i < len; i++)
-    {
-        crc = crsf_crc8tab[crc ^ *ptr++];
-    }
-    return crc;
+uint8_t crsf_crc8(const uint8_t *ptr, uint8_t len) {
+  uint8_t crc = 0;
+  for (uint8_t i = 0; i < len; i++) {
+    crc = crsf_crc8tab[crc ^ *ptr++];
+  }
+  return crc;
 }
 
-void crsfPreparePacket(uint8_t packet[], int channels[])
-{
+void crsfPreparePacket(uint8_t packet[], int channels[]) {
 
-    static int output[CRSF_MAX_CHANNEL] = {0};
-    const uint8_t crc = crsf_crc8(&packet[2], CRSF_PACKET_SIZE - 3);
-    /*
+  static int output[CRSF_MAX_CHANNEL] = { 0 };
+  const uint8_t crc = crsf_crc8(&packet[2], CRSF_PACKET_SIZE - 3);
+  /*
      * Map 1000-2000 with middle at 1500 chanel values to
      * 173-1811 with middle at 992 S.BUS protocol requires
      */
-    for (uint8_t i = 0; i < CRSF_MAX_CHANNEL; i++)
-    {
-        output[i] = channels[i];
-    }
-    /*
+  for (uint8_t i = 0; i < CRSF_MAX_CHANNEL; i++) {
+    output[i] = channels[i];
+  }
+  /*
         Serial2.print("crsf  ");
         Serial2.print(output[0]);
         Serial2.print("  i");
@@ -448,32 +245,32 @@ void crsfPreparePacket(uint8_t packet[], int channels[])
         Serial2.print(output[3]);
         Serial2.println(); */
 
-    // packet[0] = UART_SYNC; //Header
-    packet[0] = ADDR_MODULE; // Header
-    packet[1] = 24;          // length of type (24) + payload + crc
-    packet[2] = TYPE_CHANNELS;
-    packet[3] = (uint8_t)(channels[0] & 0x07FF);
-    packet[4] = (uint8_t)((channels[0] & 0x07FF) >> 8 | (channels[1] & 0x07FF) << 3);
-    packet[5] = (uint8_t)((channels[1] & 0x07FF) >> 5 | (channels[2] & 0x07FF) << 6);
-    packet[6] = (uint8_t)((channels[2] & 0x07FF) >> 2);
-    packet[7] = (uint8_t)((channels[2] & 0x07FF) >> 10 | (channels[3] & 0x07FF) << 1);
-    packet[8] = (uint8_t)((channels[3] & 0x07FF) >> 7 | (channels[4] & 0x07FF) << 4);
-    packet[9] = (uint8_t)((channels[4] & 0x07FF) >> 4 | (channels[5] & 0x07FF) << 7);
-    packet[10] = (uint8_t)((channels[5] & 0x07FF) >> 1);
-    packet[11] = (uint8_t)((channels[5] & 0x07FF) >> 9 | (channels[6] & 0x07FF) << 2);
-    packet[12] = (uint8_t)((channels[6] & 0x07FF) >> 6 | (channels[7] & 0x07FF) << 5);
-    packet[13] = (uint8_t)((channels[7] & 0x07FF) >> 3);
-    packet[14] = (uint8_t)((channels[8] & 0x07FF));
-    packet[15] = (uint8_t)((channels[8] & 0x07FF) >> 8 | (channels[9] & 0x07FF) << 3);
-    packet[16] = (uint8_t)((channels[9] & 0x07FF) >> 5 | (channels[10] & 0x07FF) << 6);
-    packet[17] = (uint8_t)((channels[10] & 0x07FF) >> 2);
-    packet[18] = (uint8_t)((channels[10] & 0x07FF) >> 10 | (channels[11] & 0x07FF) << 1);
-    packet[19] = (uint8_t)((channels[11] & 0x07FF) >> 7 | (channels[12] & 0x07FF) << 4);
-    packet[20] = (uint8_t)((channels[12] & 0x07FF) >> 4 | (channels[13] & 0x07FF) << 7);
-    packet[21] = (uint8_t)((channels[13] & 0x07FF) >> 1);
-    packet[22] = (uint8_t)((channels[13] & 0x07FF) >> 9 | (channels[14] & 0x07FF) << 2);
-    packet[23] = (uint8_t)((channels[14] & 0x07FF) >> 6 | (channels[15] & 0x07FF) << 5);
-    packet[24] = (uint8_t)((channels[15] & 0x07FF) >> 3);
+  // packet[0] = UART_SYNC; //Header
+  packet[0] = ADDR_MODULE;  // Header
+  packet[1] = 24;           // length of type (24) + payload + crc
+  packet[2] = TYPE_CHANNELS;
+  packet[3] = (uint8_t)(channels[0] & 0x07FF);
+  packet[4] = (uint8_t)((channels[0] & 0x07FF) >> 8 | (channels[1] & 0x07FF) << 3);
+  packet[5] = (uint8_t)((channels[1] & 0x07FF) >> 5 | (channels[2] & 0x07FF) << 6);
+  packet[6] = (uint8_t)((channels[2] & 0x07FF) >> 2);
+  packet[7] = (uint8_t)((channels[2] & 0x07FF) >> 10 | (channels[3] & 0x07FF) << 1);
+  packet[8] = (uint8_t)((channels[3] & 0x07FF) >> 7 | (channels[4] & 0x07FF) << 4);
+  packet[9] = (uint8_t)((channels[4] & 0x07FF) >> 4 | (channels[5] & 0x07FF) << 7);
+  packet[10] = (uint8_t)((channels[5] & 0x07FF) >> 1);
+  packet[11] = (uint8_t)((channels[5] & 0x07FF) >> 9 | (channels[6] & 0x07FF) << 2);
+  packet[12] = (uint8_t)((channels[6] & 0x07FF) >> 6 | (channels[7] & 0x07FF) << 5);
+  packet[13] = (uint8_t)((channels[7] & 0x07FF) >> 3);
+  packet[14] = (uint8_t)((channels[8] & 0x07FF));
+  packet[15] = (uint8_t)((channels[8] & 0x07FF) >> 8 | (channels[9] & 0x07FF) << 3);
+  packet[16] = (uint8_t)((channels[9] & 0x07FF) >> 5 | (channels[10] & 0x07FF) << 6);
+  packet[17] = (uint8_t)((channels[10] & 0x07FF) >> 2);
+  packet[18] = (uint8_t)((channels[10] & 0x07FF) >> 10 | (channels[11] & 0x07FF) << 1);
+  packet[19] = (uint8_t)((channels[11] & 0x07FF) >> 7 | (channels[12] & 0x07FF) << 4);
+  packet[20] = (uint8_t)((channels[12] & 0x07FF) >> 4 | (channels[13] & 0x07FF) << 7);
+  packet[21] = (uint8_t)((channels[13] & 0x07FF) >> 1);
+  packet[22] = (uint8_t)((channels[13] & 0x07FF) >> 9 | (channels[14] & 0x07FF) << 2);
+  packet[23] = (uint8_t)((channels[14] & 0x07FF) >> 6 | (channels[15] & 0x07FF) << 5);
+  packet[24] = (uint8_t)((channels[15] & 0x07FF) >> 3);
 
-    packet[25] = crsf_crc8(&packet[2], CRSF_PACKET_SIZE - 3); // CRC
+  packet[25] = crsf_crc8(&packet[2], CRSF_PACKET_SIZE - 3);  // CRC
 }
