@@ -13,10 +13,10 @@
 // PRINT INFO, uncomment to enable
 #define PRINT_INFO_ON
 
+// CRSF protocol definitions
 #define RADIO_ADDRESS 0xEA
 #define ADDR_MODULE 0xEE //  Crossfire transmitter
 #define TYPE_CHANNELS 0x16
-
 // internal crsf variables
 #define CRSF_CHANNEL_MIN 172
 #define CRSF_CHANNEL_MID 991
@@ -34,15 +34,17 @@
 #define CRSF_PACKET_SIZE 26
 #define CRSF_FRAME_LENGTH 24 // length of type + payload + crc
 
+// UART pins
 #define RXD1 12 // UART1 RX default 9
 #define TXD1 13 // UART1 TX default 10
 #define RXD2 16 // UART2 RX
 #define TXD2 17 // UART2 TX
 
+// LED pins
 #define LED_CONNECT_PIN 2
 #define LED_RGB_PIN 48 // WS2812 of ESP32s3 Super-Mini, not used
 
-// Fixed controller_channels enum (added semicolon)
+// Fixed controller_channels enum
 enum controller_channels
 {
   stick_L_X,
@@ -148,28 +150,8 @@ bool stateTriggerR1 = false;
 bool stateTriggerL2 = false;
 bool stateTriggerR2 = false;
 
-// global variables for start select
-const int millisDebounce = 1000;
-int millisButtonStart = 0;
-int transmitPower = POWER_100MW; // Start button loops through the power levels
-int millisButtonSelect = 0;
-int packetRate = PACKET_RATE_50HZ; // Select button loops through the packet rates
-
 void notify()
 {
-  // start button
-  if (Ps3.data.button.start && (millis() - millisButtonStart > millisDebounce))
-  {
-    millisButtonStart = millis();
-    // TODO: implement power level change CRSF packet
-  }
-  // select button: add missing && operator
-  if (Ps3.data.button.select && (millis() - millisButtonSelect > millisDebounce))
-  {
-    millisButtonSelect = millis();
-    // TODO: implement packet rate change CRSF packet
-  }
-
   //---------------------- Battery events ---------------------
   if (battery != Ps3.data.status.battery)
   {
@@ -291,7 +273,6 @@ void loop()
     // Serial.println("===========================================");
   }
   #endif // PRINT_INFO_ON)
-  
 }
 
 // crc implementation from CRSF protocol document rev7
